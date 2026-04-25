@@ -1,15 +1,19 @@
 require('dotenv').config();
 const express = require('express');
+const jwt = require('jsonwebtoken');
+const cookieParser = require('cookie-parser');
 const bcrypt = require('bcrypt');
 
 const connectDB = require('./config/db');
 const User = require('./models/user');
+const { userAuth } = require('./middlewares/auth');
 const { validateSignupData } = require('./utils/validators');
 
 const PORT = process.env.PORT || 3000;
 
 const app = express();
 app.use(express.json());
+app.use(cookieParser());
 
 app.post('/signup', async (req, res) => {
   const { errors, valid } = validateSignupData(req.body);
@@ -43,14 +47,35 @@ app.post('/login', async (req, res) => {
     if (!isMatch) {
       return res.status(400).json({ error: 'Invalid credentials' });
     }
-    res.json({ message: 'User logged in successfully' });
+    const token = await jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
+      expiresIn: '1h',
+    });
+
+    res
+      .cookie('token', token, { httpOnly: true })
+      .json({ message: 'User logged in successfully' });
   } catch (err) {
     console.error('Error logging in user:', err);
     res.status(500).json({ error: 'Failed to log in user' });
   }
 });
 
-app.post('/user', async (req, res) => {
+app.get('/logout', (req, res) => {
+  res.clearCookie('token').json({ message: 'User logged out successfully' });
+});
+
+app.get('/profile', userAuth, async (req, res) => {
+  const user = req.user;
+  res.json(user);
+});
+
+app.post('/user', userAuth, async (req, res) => {
+  const cookie = req.cookies;
+  const isTokenValid = await jwt.verify(cookie.token, process.env.JWT_SECRET);
+  if (!isTokenValid) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
   const email = req.body.email;
   await User.find({ email })
     .then((users) => {
