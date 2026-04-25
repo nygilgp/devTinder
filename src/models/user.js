@@ -62,6 +62,18 @@ userSchema.methods.verifyPassword = async function (passwordInputByUser) {
   return await bcrypt.compare(passwordInputByUser, this.password);
 };
 
+userSchema.methods.updatePassword = async function (newPassword) {
+  await bcrypt.hash(newPassword, 10, async (err, hash) => {
+    if (err) {
+      console.error('Error hashing password:', err);
+      return { error: 'Failed to update password' };
+    }
+    this.password = hash;
+    await this.save();
+    return { message: 'Password updated successfully' };
+  });
+};
+
 const User = mongoose.model('User', userSchema);
 
 module.exports = User;
